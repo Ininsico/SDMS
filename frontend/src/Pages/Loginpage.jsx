@@ -34,8 +34,11 @@ const ProfessionalLogin = () => {
             if (result.success) {
                 console.log('Login successful:', result);
                 localStorage.setItem('token', result.data.token);
-                // Redirect to dashboard or home page
-                alert('Login successful!');
+                localStorage.setItem('userRole', result.data.user.role);
+                localStorage.setItem('userName', result.data.user.name);
+
+                // Redirect to dashboard
+                window.location.href = '/dashboard';
             } else {
                 console.error('Login failed:', result.message);
                 alert(`Login failed: ${result.message}`);

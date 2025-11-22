@@ -1,49 +1,117 @@
-// server.js (MongoDB Version)
 const express = require('express');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const jwt = require('jwt');
 const cors = require('cors');
-require('dotenv').config();
-
-const app = express();
-
-// Middleware
-app.use(cors());
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const CryptoUtils = require('./cryptoUitils');
+require('dotenv').config()
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27107/sdms';
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'https://localhost:5173' || '*',
+    credentials: true
+}));
 app.use(express.json());
-
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/auth_demo';
-
+app.use('/uploads', express.static('uploads'));
+const app = express();
 mongoose.connect(MONGODB_URI)
-.then(() => console.log('✅ MongoDB connected'))
-.catch(err => {
-    console.log('❌ MongoDB connection error:', err.message);
+    .then(() => console.log('Database is connceted'))
+    .catch(error => {
+        console.log("Mongo Db connection failed", error.message);
+    });
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdir(uploadDir, { recursive: true });
+}
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const fileExtension = path.extname(file.originalname);
+        cb(null, 'profile-' + uniqueSuffix + fileExtension);
+    }
+});
+const fileFilter = (req, file, cb) => {
+    if (file.mimetype.startswith('image/')) {
+        cb(null, true);
+    } else {
+        cb(new Error('Only image files are allowed'), false);
+    }
+};
+const upload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+        fileSize: 10 * 1024 * 1024
+    }
+});
+const documentstorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const userDir = path.join(__dirname, 'uploads', 'documents', req.user._id.tostring());
+        if (!fs.existsSync(userDir)) {
+            fs.mkdirSync(userDir, { recursive: true });
+        }
+    },
+    filename: function (req, file, cb) {
+        const uniquesuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+        const fileExtension = path.extname(file.originalname);
+        cb(null, 'doc-' + uniquesuffix + fileExtension);
+    }
+});
+const documentfilefilter = (req, file, cb) => {
+    const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'text/plain'
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Invalid file type.Only documents and images allowed'));
+    }
+};
+const documentupload = multer({
+    storage: documentstorage,
+    fileFilter: documentfilefilter,
+    limits: {
+        fileSize: 50 * 1024 * 1024
+    }
 });
 
-// User Schema
-const userSchema = new mongoose.Schema({
+///Schemas///
+////User Schema////
+const UserSchema = new mongoose.Schema({
     name: {
         type: String,
         required: [true, 'Name is required'],
         trim: true
     },
     email: {
-        type: String,
-        required: [true, 'Email is required'],
+        name: String,
+        required: true,
         unique: true,
         lowercase: true
     },
     password: {
         type: String,
-        required: [true, 'Password is required'],
-        minlength: 6
+        require: true,
     },
     role: {
         type: String,
         default: 'user'
     },
-    isVerified: {
+    isverified: {
         type: Boolean,
         default: false
     },
@@ -51,30 +119,115 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
-    lastLogin: {
+    profilePicture: {
+        type: String,
+        default: '/uplaods/profilepics/pfp.png'
+    },
+    lastlogin: {
         type: Date
     }
-});
-
-// Hash password before saving
-userSchema.pre('save', async function(next) {
+})
+UserSchema.pre('save', async function (next) {
     if (!this.isModified('password')) return next();
     this.password = await bcrypt.hash(this.password, 12);
     next();
 });
-
-// Method to check password
-userSchema.methods.correctPassword = async function(candidatePassword) {
+UserSchema.methods.correctPassword() = async function (candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
+const User = mongoose.model('User', UserSchema);
 
-const User = mongoose.model('User', userSchema);
+/////Document Schema//////
+const DocumentSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    name: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    size: {
+        type: Number,
+        required: true
+    },
+    filetype: {
+        type: String,
+        required: true
+    },
+    filepath: {
+        type: String,
+        required: true
+    },
+    //encryption feild by default the file in not encrypted
+    encrypted: {
+        type: Boolean,
+        default: false
+    },
+    encryptionkey: {
+        type: String,
+        required: false
+    },
+    iv: {
+        type: String,
+        required: false
+    },
+    authtag: {
+        type: String,
+        required: false
+    },
+    /////sharing components/////
+    shared: {
+        type: Boolean,
+        default: false
+    },
+    sharedwith: [
+        {
+            userId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User'
+            },
+            sharedAt: {
+                type: Date,
+                default: Date.now
+            },
+            candownload: {
+                type: Boolean,
+                default: true
+            }
+        }
+    ],
+    /////integrity and audit/////
+    hash: {
+        type: String,
+        required: false
+    },
+    orginalHash: {
+        type: String,
+        required: false
+    },
+    ///Timestamps
+    uploadDate: {
+        type: Date,
+        default: Date.now
+    },
+    lastAccessed: {
+        type: Date,
+        default: Date.now
+    },
+    encryptedAt: {
+        type: Date,
+        required: false
+    }
+});
+const Document = mongoose.model('Document', DocumentSchema);
 
-// Auth Middleware
 const auth = async (req, res, next) => {
     try {
         const token = req.header('Authorization')?.replace('Bearer ', '');
-        
+
         if (!token) {
             return res.status(401).json({
                 success: false,
@@ -84,7 +237,7 @@ const auth = async (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production');
         const user = await User.findById(decoded.userId).select('-password');
-        
+
         if (!user) {
             return res.status(401).json({
                 success: false,
@@ -101,89 +254,53 @@ const auth = async (req, res, next) => {
         });
     }
 };
-
-// Routes
-
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({
-        success: true,
-        message: 'Server is running',
-        timestamp: new Date().toISOString(),
-        database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
-    });
-});
-
-// Signup endpoint
 app.post('/api/signup', async (req, res) => {
     try {
-        const { name, email, password, confirmPassword } = req.body;
-
-        // Validation
-        if (!name || !email || !password || !confirmPassword) {
+        const { name, email, password, confirmpassword } = req.body;
+        if (!name || !email || !password || !confirmpassword) {
             return res.status(400).json({
-                success: false,
-                message: 'All fields are required'
+                success: false
             });
         }
-
-        if (password !== confirmPassword) {
+        if (password !== confirmpassword) {
             return res.status(400).json({
-                success: false,
-                message: 'Passwords do not match'
-            });
+                success: false
+            })
         }
-
         if (password.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: 'Password must be at least 6 characters'
-            });
+                message: "Password can not be less than 6 characters"
+            })
         }
-
-        // Check if user already exists
-        const existingUser = await User.findOne({ email: email.toLowerCase() });
-        if (existingUser) {
-            return res.status(409).json({
-                success: false,
-                message: 'User already exists with this email'
-            });
-        }
-
-        // Create user
-        const user = new User({
+        const User = new User({
             name: name.trim(),
-            email: email.toLowerCase(),
-            password, // This will be hashed by the pre-save middleware
-            role: 'user'
+            email: email.toLowerCase();
+            password,
+            role: 'User'
         });
-
-        await user.save();
-
-        // Generate JWT token
+        await User.save();
         const token = jwt.sign(
-            { userId: user._id, email: user.email, role: user.role },
-            process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
+            { userId: User._id, email: User.email, role: User.role },
+            process.env.JWT_SECRET || 'your_secret_key',
             { expiresIn: '24h' }
         );
-
         res.status(201).json({
             success: true,
-            message: 'User created successfully',
+            message: 'User Created Successfully',
             data: {
                 user: {
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    role: user.role
+                    id: User._id,
+                    name: User.name,
+                    email: User.email,
+                    role: User.role
                 },
                 token
             }
         });
-
-    } catch (error) {
+    } catch (err) {
         console.error('Signup error:', error);
-        
+
         if (error.code === 11000) {
             return res.status(409).json({
                 success: false,
@@ -198,55 +315,43 @@ app.post('/api/signup', async (req, res) => {
     }
 });
 
-// Login endpoint
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
                 message: 'Email and password are required'
             });
         }
-
-        // Find user and include password
-        const user = await User.findOne({ email: email.toLowerCase() });
-        
-        if (!user || !(await user.correctPassword(password))) {
-            return res.status(401).json({
+        const User = await findOne({ email: email.toLowerCase() });
+        if (!User || !(await User.correctPassword(password))) {
+            return res.status(400).json({
                 success: false,
-                message: 'Invalid email or password'
+                message: 'Invalid Email or Password'
             });
         }
-
-        // Update last login
-        user.lastLogin = new Date();
-        await user.save();
-
-        // Generate JWT token
+        User.lastlogin = new Date();
+        await User.save()
         const token = jwt.sign(
-            { userId: user._id, email: user.email, role: user.role },
-            process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
+            { userId: User._id, email: User.email, role: User.role },
+            process.env.JWT_SECRET || 'Your_secrect_key',
             { expiresIn: '24h' }
-        );
-
+        )
         res.json({
             success: true,
-            message: 'Login successful',
+            message: "Login successfull",
             data: {
                 user: {
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    role: user.role,
-                    lastLogin: user.lastLogin
+                    id: User._id,
+                    name: User.name,
+                    email: User.email,
+                    role: User.role
                 },
                 token
             }
         });
-
-    } catch (error) {
+    } catch (err) {
         console.error('Login error:', error);
         res.status(500).json({
             success: false,
@@ -255,36 +360,11 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Get user profile (protected)
-app.get('/api/profile', auth, async (req, res) => {
-    try {
-        res.json({
-            success: true,
-            data: {
-                user: req.user
-            }
-        });
-    } catch (error) {
-        console.error('Profile error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error'
-        });
-    }
-});
-
-// 404 handler - FIXED VERSION
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        message: 'Route not found'
+app.get('/api/health', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Server is running',
+        timestap: new Date().toISOString(),
+        database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
     });
-});
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
-    console.log(`📊 Database status: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'}`);
 });
