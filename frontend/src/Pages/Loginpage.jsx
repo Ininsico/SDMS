@@ -6,6 +6,7 @@ const ProfessionalLogin = () => {
         email: '',
         password: ''
     });
+    const [loading, setLoading] = useState(false);
 
     const handleChange = (e) => {
         setFormData({
@@ -16,6 +17,14 @@ const ProfessionalLogin = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Client-side validation
+        if (!formData.email || !formData.password) {
+            alert('Please fill in all fields');
+            return;
+        }
+
+        setLoading(true);
 
         try {
             const response = await fetch('http://localhost:5000/api/login', {
@@ -36,6 +45,7 @@ const ProfessionalLogin = () => {
                 localStorage.setItem('token', result.data.token);
                 localStorage.setItem('userRole', result.data.user.role);
                 localStorage.setItem('userName', result.data.user.name);
+                localStorage.setItem('userId', result.data.user.id);
 
                 // Redirect to dashboard
                 window.location.href = '/dashboard';
@@ -46,6 +56,8 @@ const ProfessionalLogin = () => {
         } catch (error) {
             console.error('Error during login:', error);
             alert('Error during login. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -74,6 +86,7 @@ const ProfessionalLogin = () => {
                                 className="w-full px-4 py-3 bg-gray-700 border border-blue-800/50 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 placeholder="Enter your email"
                                 required
+                                disabled={loading}
                             />
                         </div>
 
@@ -95,6 +108,7 @@ const ProfessionalLogin = () => {
                                 className="w-full px-4 py-3 bg-gray-700 border border-blue-800/50 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 placeholder="Enter your password"
                                 required
+                                disabled={loading}
                             />
                         </div>
 
@@ -104,6 +118,7 @@ const ProfessionalLogin = () => {
                                 type="checkbox"
                                 id="remember"
                                 className="w-4 h-4 text-blue-600 bg-gray-700 border-blue-800 rounded focus:ring-blue-500"
+                                disabled={loading}
                             />
                             <label htmlFor="remember" className="ml-2 text-sm text-blue-100">
                                 Remember me for 30 days
@@ -113,9 +128,12 @@ const ProfessionalLogin = () => {
                         {/* Submit Button */}
                         <button
                             type="submit"
-                            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                            disabled={loading}
+                            className={`w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                                loading ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                         >
-                            Sign In
+                            {loading ? 'Signing In...' : 'Sign In'}
                         </button>
                     </form>
 
@@ -132,10 +150,18 @@ const ProfessionalLogin = () => {
 
                         {/* Social Login */}
                         <div className="mt-6 grid grid-cols-2 gap-3">
-                            <button className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200">
+                            <button 
+                                type="button"
+                                disabled={loading}
+                                className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200 disabled:opacity-50"
+                            >
                                 <span>Google</span>
                             </button>
-                            <button className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200">
+                            <button 
+                                type="button"
+                                disabled={loading}
+                                className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200 disabled:opacity-50"
+                            >
                                 <span>GitHub</span>
                             </button>
                         </div>
@@ -146,7 +172,10 @@ const ProfessionalLogin = () => {
                 <div className="text-center mt-6">
                     <p className="text-blue-200">
                         Don't have an account?{' '}
-                        <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-semibold transition-colors">
+                        <Link 
+                            to="/signup" 
+                            className="text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+                        >
                             Sign up
                         </Link>
                     </p>

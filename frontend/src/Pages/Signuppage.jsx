@@ -6,8 +6,9 @@ const ProfessionalSignup = () => {
         name: '',
         email: '',
         password: '',
-        confirmPassword: ''
+        confirmpassword: '' // Changed from confirmPassword to confirmpassword
     });
+    const [loading, setLoading] = useState(false);
 
     const handleChange = (e) => {
         setFormData({
@@ -19,13 +20,39 @@ const ProfessionalSignup = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        // Client-side validation
+        if (formData.password !== formData.confirmpassword) {
+            alert('Passwords do not match');
+            return;
+        }
+
+        if (formData.password.length < 6) {
+            alert('Password must be at least 6 characters');
+            return;
+        }
+
+        if (!formData.name || !formData.email || !formData.password || !formData.confirmpassword) {
+            alert('All fields are required');
+            return;
+        }
+
+        setLoading(true);
+
         try {
+            // Prepare data for backend (matching backend field names)
+            const submitData = {
+                name: formData.name,
+                email: formData.email,
+                password: formData.password,
+                confirmpassword: formData.confirmpassword // Matches backend expectation
+            };
+
             const response = await fetch('http://localhost:5000/api/signup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(submitData),
             });
 
             const result = await response.json();
@@ -36,6 +63,8 @@ const ProfessionalSignup = () => {
                 localStorage.setItem('token', result.data.token);
                 // Redirect user or show success message
                 alert('Account created successfully!');
+                // Optionally redirect to login or dashboard
+                // window.location.href = '/dashboard';
             } else {
                 console.error('Signup failed:', result.message);
                 alert(`Signup failed: ${result.message}`);
@@ -43,6 +72,8 @@ const ProfessionalSignup = () => {
         } catch (error) {
             console.error('Error during signup:', error);
             alert('Error during signup. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -71,6 +102,7 @@ const ProfessionalSignup = () => {
                                 className="w-full px-4 py-3 bg-gray-700 border border-blue-800/50 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 placeholder="Enter your full name"
                                 required
+                                disabled={loading}
                             />
                         </div>
 
@@ -87,6 +119,7 @@ const ProfessionalSignup = () => {
                                 className="w-full px-4 py-3 bg-gray-700 border border-blue-800/50 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 placeholder="Enter your email"
                                 required
+                                disabled={loading}
                             />
                         </div>
 
@@ -101,8 +134,9 @@ const ProfessionalSignup = () => {
                                 value={formData.password}
                                 onChange={handleChange}
                                 className="w-full px-4 py-3 bg-gray-700 border border-blue-800/50 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                                placeholder="Create a password"
+                                placeholder="Create a password (min. 6 characters)"
                                 required
+                                disabled={loading}
                             />
                         </div>
 
@@ -113,12 +147,13 @@ const ProfessionalSignup = () => {
                             </label>
                             <input
                                 type="password"
-                                name="confirmPassword"
-                                value={formData.confirmPassword}
+                                name="confirmpassword" // Changed from confirmPassword to confirmpassword
+                                value={formData.confirmpassword}
                                 onChange={handleChange}
                                 className="w-full px-4 py-3 bg-gray-700 border border-blue-800/50 rounded-lg text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                                 placeholder="Confirm your password"
                                 required
+                                disabled={loading}
                             />
                         </div>
 
@@ -129,6 +164,7 @@ const ProfessionalSignup = () => {
                                 id="terms"
                                 className="w-4 h-4 text-blue-600 bg-gray-700 border-blue-800 rounded focus:ring-blue-500"
                                 required
+                                disabled={loading}
                             />
                             <label htmlFor="terms" className="ml-2 text-sm text-blue-100">
                                 I agree to the Terms and Conditions
@@ -138,9 +174,12 @@ const ProfessionalSignup = () => {
                         {/* Submit Button */}
                         <button
                             type="submit"
-                            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                            disabled={loading}
+                            className={`w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                                loading ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
                         >
-                            Create Account
+                            {loading ? 'Creating Account...' : 'Create Account'}
                         </button>
                     </form>
 
@@ -157,10 +196,18 @@ const ProfessionalSignup = () => {
 
                         {/* Social Signup */}
                         <div className="mt-6 grid grid-cols-2 gap-3">
-                            <button className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200">
+                            <button 
+                                type="button"
+                                disabled={loading}
+                                className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200 disabled:opacity-50"
+                            >
                                 <span>Google</span>
                             </button>
-                            <button className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200">
+                            <button 
+                                type="button"
+                                disabled={loading}
+                                className="w-full inline-flex justify-center py-2 px-4 border border-blue-800/50 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-blue-100 hover:bg-gray-600 transition-colors duration-200 disabled:opacity-50"
+                            >
                                 <span>GitHub</span>
                             </button>
                         </div>
@@ -171,7 +218,10 @@ const ProfessionalSignup = () => {
                 <div className="text-center mt-6">
                     <p className="text-blue-200">
                         Already have an account?{' '}
-                        <Link to="/login" className="text-blue-400 hover:text-blue-300 font-semibold transition-colors">
+                        <Link 
+                            to="/login" 
+                            className="text-blue-400 hover:text-blue-300 font-semibold transition-colors"
+                        >
                             Sign in
                         </Link>
                     </p>

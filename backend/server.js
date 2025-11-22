@@ -15,7 +15,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sdms';
 const app = express(); // Moved app declaration before use statements
 
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'https://localhost:5173' || '*',
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173' || '*',
     credentials: true
 }));
 app.use(express.json());
@@ -247,7 +247,7 @@ const auth = async (req, res, next) => {
             });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production');
+        const decoded = jwt.verify(token,  process.env.JWT_SECRET || 'your_secret_key');
         const user = await User.findById(decoded.userId).select('-password');
 
         if (!user) {
@@ -296,7 +296,7 @@ app.post('/api/signup', async (req, res) => {
             password,
             role: 'user' // Fixed: 'User' to 'user'
         });
-        
+
         await user.save(); // Fixed: User.save() to user.save()
 
         const token = jwt.sign(
@@ -347,7 +347,7 @@ app.post('/api/login', async (req, res) => {
 
         // Fixed: findOne to User.findOne
         const user = await User.findOne({ email: email.toLowerCase() });
-        
+
         if (!user || !(await user.correctPassword(password))) {
             return res.status(400).json({
                 success: false,
@@ -385,13 +385,24 @@ app.post('/api/login', async (req, res) => {
         });
     }
 });
-
-app.get('/api/profile', auth, async (req, res) => { // Added missing auth middleware
+app.get('/api/profile', auth, async (req, res) => {
     try {
+        // Ensure we have the complete user data with all fields
+        const user = await User.findById(req.user._id).select('-password');
+        
         res.json({
             success: true,
             data: {
-                user: req.user, // Fixed: User to user
+                user: {
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    profilePicture: user.profilePicture,
+                    createdAt: user.createdAt,
+                    lastLogin: user.lastlogin, // Map to camelCase for frontend
+                    isVerified: user.isverified
+                }
             }
         });
     } catch (error) {
@@ -470,7 +481,7 @@ app.put('/api/profile/password', auth, async (req, res) => {
 
         // Fixed: findById to User.findById
         const user = await User.findById(req.user._id);
-        
+
         if (currentpassword) {
             const isCurrentPasswordValid = await user.correctPassword(currentpassword);
             if (!isCurrentPasswordValid) {
@@ -508,7 +519,7 @@ app.post('/api/profile/picture', auth, upload.single('profilePicture'), async (r
 
         // Fixed: findOne to User.findById
         const user = await User.findById(req.user._id);
-        
+
         if (user.profilePicture && user.profilePicture.startsWith('/uploads/')) { // Fixed: startswith to startsWith
             const oldFilePath = path.join(__dirname, '..', user.profilePicture); // Fixed variable name and added '..'
             if (fs.existsSync(oldFilePath)) {
@@ -547,19 +558,41 @@ app.post('/api/profile/picture', auth, upload.single('profilePicture'), async (r
     }
 });
 
-app.delete('/api/profile/delete', auth, async (req, res) => { // Fixed: added missing / at beginning
+app.delete('/api/profile/picture', auth, async (req, res) => { // Fixed route to be more specific
     try {
-        const user = await User.findById(req.user._id); // Fixed: findOne to User.findById
-        // Add your delete logic here
+        const user = await User.findById(req.user._id);
+
+        // Delete the current profile picture file if it's not the default one
+        if (user.profilePicture &&
+            user.profilePicture.startsWith('/uploads') &&
+            user.profilePicture !== '/uploads/profilepics/pfp.png') { // Check if it's not already the default
+
+            const filePath = path.join(__dirname, '..', user.profilePicture); // Added '..' to go up one level
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        // Revert to default profile picture
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user._id,
+            { profilePicture: '/uploads/profilepics/pfp.png' }, // Set to default instead of empty string
+            { new: true }
+        ).select('-password');
+
         res.json({
             success: true,
-            message: "Profile deleted successfully"
+            message: 'Profile picture removed successfully',
+            data: {
+                user: updatedUser,
+                profilePicturePath: `${req.protocol}://${req.get('host')}/uploads/profilepics/pfp.png`
+            }
         });
     } catch (error) {
-        console.error('Profile delete error:', error);
+        console.error('Profile picture delete error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to delete profile'
+            message: 'Failed to remove profile picture'
         });
     }
 });
@@ -574,7 +607,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Added missing server listen
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
