@@ -605,7 +605,8 @@ app.get('/api/health', (req, res) => {
         database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
     });
 });
-
+const documentRoutes = require('./documentRoutes')(auth, Document, documentupload);
+app.use('/api/documents', documentRoutes);
 // Added missing server listen
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
