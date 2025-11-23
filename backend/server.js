@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const CryptoUtils = require('./cryptoUitils');
+const { encryptionRoutes, shareRoutes } = require('./encryptionSchemas');
 require('dotenv').config()
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sdms'; // Fixed port: 27107 to 27017
@@ -180,7 +181,7 @@ const DocumentSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    encryptionkey: {
+    encryptionKey: { // Change from encryptionkey to encryptionKey
         type: String,
         required: false
     },
@@ -188,7 +189,7 @@ const DocumentSchema = new mongoose.Schema({
         type: String,
         required: false
     },
-    authtag: {
+    authTag: { // Change from authtag to authTag
         type: String,
         required: false
     },
@@ -247,7 +248,7 @@ const auth = async (req, res, next) => {
             });
         }
 
-        const decoded = jwt.verify(token,  process.env.JWT_SECRET || 'your_secret_key');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
         const user = await User.findById(decoded.userId).select('-password');
 
         if (!user) {
@@ -389,7 +390,7 @@ app.get('/api/profile', auth, async (req, res) => {
     try {
         // Ensure we have the complete user data with all fields
         const user = await User.findById(req.user._id).select('-password');
-        
+
         res.json({
             success: true,
             data: {
@@ -605,9 +606,63 @@ app.get('/api/health', (req, res) => {
         database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
     });
 });
-const documentRoutes = require('./documentRoutes')(auth, Document, documentupload);
+//=========document stuff being called from other files==========//
+const documentRoutes = require('./documentRoutes')(auth, Document, documentupload, CryptoUtils)
 app.use('/api/documents', documentRoutes);
-// Added missing server listen
+//========encryption stuff being called from other files=========//
+app.use('/api/encryption', encryptionRoutes(auth, CryptoUtils));
+app.use('/api/share', shareRoutes(auth, CryptoUtils));
+// ADD THIS DEBUG ROUTE TO CHECK WHAT THE FUCK IS HAPPENING
+app.get('/api/debug/document/:id', auth, async (req, res) => {
+    try {
+        const document = await Document.findOne({
+            _id: req.params.id,
+            userId: req.user._id
+        });
+
+        if (!document) {
+            return res.status(404).json({
+                success: false,
+                message: 'Document not found in database'
+            });
+        }
+
+        // Check if file exists and get details
+        const fileExists = fs.existsSync(document.filepath);
+        let fileStats = null;
+        if (fileExists) {
+            fileStats = {
+                size: fs.statSync(document.filepath).size,
+                created: fs.statSync(document.filepath).birthtime
+            };
+        }
+
+        res.json({
+            success: true,
+            data: {
+                document: {
+                    _id: document._id,
+                    name: document.name,
+                    filepath: document.filepath,
+                    encrypted: document.encrypted,
+                    fileExists: fileExists,
+                    fileStats: fileStats,
+                    // Check all possible field names
+                    encryptionKey: document.encryptionKey || document.encryptionkey,
+                    iv: document.iv,
+                    authTag: document.authTag || document.authtag,
+                    hash: document.hash
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Debug error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Debug failed: ' + error.message
+        });
+    }
+});
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
